@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: video-hls-app
+    runtime: node
+    plan: free
+    buildCommand: "echo 'No build step required'"
+    startCommand: "node proxy-server.js"
+    envVars:
+      - key: HLS_ALLOWED_HOSTS
+        value: "*"
+      - key: HLS_PROXY_TIMEOUT_MS
+        value: "20000"
