@@ -323,7 +323,8 @@
       const savedEpisodes = await OfflineHls.listEpisodes();
       const readyIds = new Set(savedEpisodes.filter((episode) => episode.status === 'ready').map((episode) => episode.id));
       const completed = queueItems.filter((item) => readyIds.has(episodeIdForItem(item)));
-      const queue = { job, items: queueItems, index: Math.min(Number(job.currentIndex) || 0, queueItems.length), completed, failed: [], controller: null, action: null };
+      const firstPendingIndex = queueItems.findIndex((item) => !readyIds.has(episodeIdForItem(item)));
+      const queue = { job, items: queueItems, index: firstPendingIndex < 0 ? queueItems.length : firstPendingIndex, completed, failed: [], controller: null, action: null };
       const metadataById = new Map((job.episodeMeta || []).map((item) => [item.id, item]));
       queueItems.forEach((item) => metadataById.set(episodeIdForItem(item), { id: episodeIdForItem(item), ...item }));
       job.episodeIds = [...new Set(queueItems.map(episodeIdForItem))];
@@ -391,7 +392,8 @@
           ? episodeIdForItem(queue.failed[0])
           : null;
       await persistJob(job);
-      lastQueueResult = { queue, paused, cancelled };
+      const resumable = paused || (!complete && !cancelled && queue.failed.length === 0);
+      lastQueueResult = { queue, paused: resumable, cancelled };
       activeQueue = null;
       ensureLock().querySelector('.episode-download-lock__pause').hidden = true;
       cancelButton.hidden = false;
@@ -508,11 +510,11 @@
       : '设备空间使用较高，请留意剩余容量';
   };
 
-  const updateQueueNotice = () => {
+  const updateQueueNotice = (displayedEpisodeIds = null) => {
     const notice = libraryLayer?.querySelector('.offline-hls-library__queue-notice');
     if (!notice) return;
     const job = currentRecoverableJob();
-    if (!job) {
+    if (!job || (displayedEpisodeIds && job.episodeIds.every((id) => displayedEpisodeIds.has(id)))) {
       notice.hidden = true;
       return;
     }
@@ -699,8 +701,8 @@
         OfflineHls.listEpisodes(),
       ]);
       renderStorageSummary(summary);
-      updateQueueNotice();
       const groups = groupEpisodes(episodes);
+      updateQueueNotice(new Set(episodes.map((episode) => episode.id)));
       const pendingEpisodeIds = new Set(currentRecoverableJob()?.episodeIds || []);
       groups.sort((left, right) => {
         const leftPending = left.episodes.some((episode) => pendingEpisodeIds.has(episode.id));
