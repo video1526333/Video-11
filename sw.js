@@ -1,4 +1,4 @@
-const VERSION = 'video-pwa-v19';
+const VERSION = 'video-pwa-v21';
 const OFFLINE_DB = 'video-offline-hls';
 const OFFLINE_DB_VERSION = 3;
 const OFFLINE_ASSETS = 'assets';

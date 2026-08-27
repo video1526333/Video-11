@@ -188,27 +188,11 @@
       episode.removeAttribute('aria-pressed');
     });
     header.dataset.downloadState = states.idle;
-    header.querySelector('.episode-download-actions')?.remove();
-    header.querySelector('.episode-download-multi')?.removeAttribute('aria-pressed');
-  };
-
-  const refreshSingleButton = async (button, episode) => {
-    if (!button || !episode || !window.OfflineHls) return;
-    try {
-      const saved = await OfflineHls.getEpisode(OfflineHls.episodeIdFor(episode.sourceUrl, episode.title, episode.seriesTitle));
-      button.dataset.downloadState = saved?.status || states.idle;
-      button.textContent = saved?.status === 'ready'
-        ? '已保存 · 播放'
-        : saved?.status === 'downloading'
-          ? '正在保存…'
-          : saved?.status === 'failed' || saved?.status === 'paused'
-            ? '继续保存'
-            : '保存本集';
-      button.title = saved?.status === 'ready'
-        ? `已保存 ${formatBytes(saved.downloadedBytes)}，点击离线观看`
-        : '保存本集供离线观看';
-    } catch {
-      button.textContent = '保存本集';
+    header.closest('.dmodal__episodes, .dmodal__episodes-drawer')?.querySelector('.episode-download-actions')?.remove();
+    const multi = header.querySelector('.episode-download-multi');
+    if (multi) {
+      multi.hidden = false;
+      multi.setAttribute('aria-expanded', 'false');
     }
   };
 
@@ -221,7 +205,7 @@
     const drawer = header.closest('.dmodal__episodes, .dmodal__episodes-drawer');
     const summary = drawer?.querySelector('.episode-download-summary');
     const start = drawer?.querySelector('.episode-download-start');
-    if (summary) summary.textContent = selected.length ? `已选择 ${selected.length} 集 · 正在计算大小…` : '请选择要下载的集数';
+    if (summary) summary.textContent = `已选择 ${selected.length} 集${selected.length ? ' · 正在计算大小…' : ''}`;
     if (start) {
       start.disabled = !selected.length;
       start.textContent = selected.length ? `开始下载（${selected.length}）` : '开始下载';
@@ -238,8 +222,8 @@
     const drawer = header.closest('.dmodal__episodes, .dmodal__episodes-drawer');
     const multi = header.querySelector('.episode-download-multi');
     if (multi) {
-      multi.textContent = '取消选择';
-      multi.setAttribute('aria-pressed', 'true');
+      multi.hidden = true;
+      multi.setAttribute('aria-expanded', 'true');
     }
     getEpisodes(header).forEach((episode) => {
       if (episode.querySelector('input[type="checkbox"]')) return;
@@ -260,11 +244,11 @@
       const summary = document.createElement('span');
       summary.className = 'episode-download-summary';
       summary.setAttribute('aria-live', 'polite');
-      summary.textContent = '请选择要下载的集数';
+      summary.textContent = '已选择 0 集';
       const cancel = document.createElement('button');
       cancel.type = 'button';
       cancel.className = 'episode-download-cancel';
-      cancel.textContent = '取消';
+      cancel.textContent = '取消选择';
       cancel.addEventListener('click', () => resetSelection(header));
       const start = document.createElement('button');
       start.type = 'button';
@@ -276,7 +260,6 @@
       drawer.append(actions);
     }
     updateSelection(header);
-    message('请选择要下载的集数');
   };
 
   const itemsForJob = async (job) => {
@@ -429,11 +412,6 @@
     lastQueueResult = null;
     const header = getHeader();
     if (header) resetSelection(header);
-    if (result) {
-      result.queue.items.forEach((item) => {
-        refreshSingleButton(header?.querySelector('.episode-download-single'), item);
-      });
-    }
     refreshRecoverableJobs().catch(() => {});
   };
 
@@ -1047,32 +1025,14 @@
   const decorate = () => {
     const header = getHeader();
     if (header && window.OfflineHls) {
-      if (!header.querySelector('.episode-download-single')) {
-        const single = make('button', 'episode-download-single', '保存本集');
-        single.type = 'button';
-        single.setAttribute('aria-label', '保存本集供离线观看');
-        single.addEventListener('click', async () => {
-          const item = getCurrentEpisode(header);
-          if (!item) {
-            message('当前没有可保存的剧集', 'error');
-            return;
-          }
-          const saved = await OfflineHls.getEpisode(OfflineHls.episodeIdFor(item.sourceUrl, item.title, item.seriesTitle));
-          if (saved?.status === 'ready') return OfflineHls.createViewer(saved);
-          startQueue([item], header);
-        });
-        header.append(single);
-      }
       if (!header.querySelector('.episode-download-multi')) {
-        const multi = make('button', 'episode-download-multi', '下载多集');
+        const multi = make('button', 'episode-download-multi', '下载剧集');
         multi.type = 'button';
-        multi.setAttribute('aria-label', '选择多集下载');
-        multi.addEventListener('click', () => header.dataset.downloadState === states.selecting
-          ? resetSelection(header)
-          : enterSelection(header));
+        multi.setAttribute('aria-label', '选择要下载的剧集');
+        multi.setAttribute('aria-expanded', 'false');
+        multi.addEventListener('click', () => enterSelection(header));
         header.append(multi);
       }
-      refreshSingleButton(header.querySelector('.episode-download-single'), getCurrentEpisode(header));
     }
     ensureTrigger();
   };
@@ -1082,7 +1042,6 @@
     if (episode && !document.documentElement.dataset.downloadLock) {
       const header = getHeader();
       window.__offlineCurrentEpisode = detailsFor(episode, header);
-      refreshSingleButton(header?.querySelector('.episode-download-single'), window.__offlineCurrentEpisode);
     }
     const selectedHeader = getHeader();
     if (selectedHeader?.dataset.downloadState === states.selecting && episode) {
