@@ -10,6 +10,7 @@
   let librarySort = 'recent';
   let libraryMediaQuery;
   let libraryMediaHandler;
+  let libraryRenderVersion = 0;
   let activeQueue;
   let lastQueueResult;
   let recoverableJobs = [];
@@ -694,12 +695,16 @@
 
   const renderLibrary = async () => {
     if (!libraryLayer || !window.OfflineHls) return;
-    libraryList.replaceChildren();
+    const renderVersion = ++libraryRenderVersion;
+    const layer = libraryLayer;
+    const list = libraryList;
     try {
       const [summary, episodes] = await Promise.all([
         OfflineHls.storageSummary(),
         OfflineHls.listEpisodes(),
       ]);
+      if (renderVersion !== libraryRenderVersion || libraryLayer !== layer || libraryList !== list) return;
+      list.replaceChildren();
       renderStorageSummary(summary);
       const groups = groupEpisodes(episodes);
       updateQueueNotice(new Set(episodes.map((episode) => episode.id)));
@@ -725,7 +730,7 @@
           make('strong', '', '暂无离线内容'),
           make('span', '', '保存剧集后，可在断网时从这里播放'),
         );
-        libraryList.append(empty);
+        list.append(empty);
         manage.disabled = true;
         updateManagementFooter();
         return;
@@ -787,15 +792,17 @@
         episodesElement.hidden = !expanded;
         group.episodes.forEach((episode) => episodesElement.append(renderEpisodeCard(episode, groupElement, groupEpisodeIds)));
         groupElement.append(groupHeader, episodesElement);
-        libraryList.append(groupElement);
+        list.append(groupElement);
         syncGroupSelection(groupElement, groupEpisodeIds);
       });
       updateManagementFooter();
     } catch (error) {
+      if (renderVersion !== libraryRenderVersion || libraryLayer !== layer || libraryList !== list) return;
+      list.replaceChildren();
       const storage = libraryLayer.querySelector('.offline-hls-library__storage');
       storage.dataset.warning = 'critical';
       storage.querySelector('[data-storage-offline]').textContent = '存储信息暂时无法读取';
-      libraryList.append(make('p', 'offline-hls-library__empty', errorText(error)));
+      list.append(make('p', 'offline-hls-library__empty', errorText(error)));
     }
   };
 
@@ -830,6 +837,7 @@
       return;
     }
     const focusTarget = libraryReturnFocus;
+    libraryRenderVersion += 1;
     libraryLayer.remove();
     if (libraryMediaQuery && libraryMediaHandler) libraryMediaQuery.removeEventListener('change', libraryMediaHandler);
     libraryLayer = null;
