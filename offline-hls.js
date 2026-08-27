@@ -154,20 +154,35 @@ import {
     if (!/^https?:\/\//i.test(url)) throw new OfflineHlsError('INVALID_URL', 'HLS 地址无效', false);
     const headers = { Accept: accept };
     if (range) headers.Range = range;
+    let directError = null;
+    try {
+      const response = await fetch(url, { signal, headers, cache: 'no-store' });
+      if (response.ok) return response;
+      directError = await parseErrorResponse(
+        response,
+        response.status === 404 ? ERROR_CODES.UPSTREAM_HTTP_ERROR : ERROR_CODES.UPSTREAM_UNAVAILABLE,
+        response.status === 404 ? '视频资源已失效' : '视频服务器拒绝浏览器下载',
+        response.status >= 500,
+      );
+    } catch (error) {
+      if (error.name === 'AbortError') throw new OfflineHlsError(ERROR_CODES.CANCELLED, '下载已取消', true);
+      directError = new OfflineHlsError(ERROR_CODES.UPSTREAM_UNAVAILABLE, '浏览器无法直接访问视频服务器，正在尝试代理下载', true);
+    }
     let response;
     try {
       response = await fetch(proxyUrl(url), { signal, headers, cache: 'no-store' });
     } catch (error) {
       if (error.name === 'AbortError') throw new OfflineHlsError(ERROR_CODES.CANCELLED, '下载已取消', true);
-      throw new OfflineHlsError(ERROR_CODES.UPSTREAM_UNAVAILABLE, '无法访问视频服务器', true);
+      throw directError || new OfflineHlsError(ERROR_CODES.UPSTREAM_UNAVAILABLE, '无法访问视频服务器', true);
     }
     if (!response.ok) {
-      throw await parseErrorResponse(
+      const proxyError = await parseErrorResponse(
         response,
         response.status === 404 ? ERROR_CODES.UPSTREAM_HTTP_ERROR : ERROR_CODES.UPSTREAM_UNAVAILABLE,
         response.status === 404 ? '视频资源已失效' : '视频服务器暂时不可用',
         response.status >= 500,
       );
+      throw directError || proxyError;
     }
     return response;
   };
